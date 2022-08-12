@@ -27,9 +27,9 @@ class core:
     gateway = None
     # Addresses to ping to ensure those services can be reached, if enabled
     network = {"PyPi": "www.pypi.org"}
+    # "Github": "www.github.com",
 
 
-# "Github": "www.github.com",
 @dataclass(slots=True, frozen=True)
 class target:
     """Config relating to the script to be triggered"""
@@ -46,7 +46,7 @@ class target:
     requiredFolders = []
     # Names of the optional folders for target
     optionalFolders = []
-    # Username / repo (SSCBot | Strider)
+    # Username/repo (SSCBot | Strider)
     repository = "APasz/Strider"
     # Folder that the target script itself is in. The one that'll be run
     targetDirectory = "active"
@@ -54,6 +54,8 @@ class target:
     archiveDirectory = "archive"
     # Addresses to ping to ensure the target script can start
     network = {"Discord": "www.discord.com"}
+    # Check version before replace (only compatible with scripts that have a changelog.json in root where the keys is the version)
+    checkVersion = True
 
 
 # MIT APasz
