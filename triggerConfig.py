@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 
 @dataclass(slots=True, frozen=True)
-class core:
+class CORE:
     """Config relating to this script"""
 
     # Name of requirements file for self
@@ -31,7 +31,7 @@ class core:
 
 
 @dataclass(slots=True, frozen=True)
-class target:
+class TARGET:
     """Config relating to the script to be triggered"""
 
     # Name of target script
@@ -54,7 +54,8 @@ class target:
     archiveDirectory = "archive"
     # Addresses to ping to ensure the target script can start
     network = {"Discord": "www.discord.com"}
-    # Check version before replace (only compatible with scripts that have a changelog.json in root where the keys is the version)
+    # Check version before replace
+    # (only compatible with scripts that have a changelog.json in root where the keys are the version)
     checkVersion = True
 
 

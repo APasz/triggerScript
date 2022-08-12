@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from curses.ascii import isdigit
 import os
 import shutil
 import sys
@@ -7,8 +6,10 @@ import platform
 from packaging import version
 import logging
 import time
-import datetime
-
+from datetime import datetime as datetime
+import subprocess
+from triggerConfig import CORE as coreCF
+from triggerConfig import TARGET as targetCF
 
 PID = os.getpid()
 print(f"*** Starting ***\nPID: {PID}")
@@ -28,14 +29,11 @@ if version.parse(platform.python_version()) < version.parse("3.10.0"):
 	log.critical("Python 3.10.0 or greater is required!")
 	exit()
 
-from triggerConfig import core as coreCF
-from triggerConfig import target as targetCF
-
-global curDir
 curDir = os.path.dirname(os.path.realpath(__file__))
 if targetCF.targetDirectory is not None:
-	global tarDir
 	tarDir = os.path.join(curDir, targetCF.targetDirectory)
+else:
+	tarDir = None
 
 handleFile = logging.FileHandler(
 	filename=f"{curDir}{os.sep}{scriptName}.log",
@@ -47,9 +45,8 @@ handleFile.setFormatter(
 		"%(asctime).19s %(created).2f | %(levelname).4s |:| %(funcName)s | %(message)s",
 	)
 )
-handleFile.setLevel((coreCF.logLevel).upper())
+handleFile.setLevel(coreCF.logLevel.upper())
 log.addHandler(handleFile)
-
 
 log.critical(
 	f"""Starting...
@@ -61,10 +58,8 @@ log.critical(
 	Target Directory: {tarDir}"""
 )
 
-import subprocess
 
-
-def runCOMM(name: str, comm: list, nullOut: bool = False):
+def run_comm(name: str, comm: list, nullOut: bool = False):
 	log.debug(f"{name} | {comm}")
 	try:
 		if nullOut:
@@ -75,12 +70,12 @@ def runCOMM(name: str, comm: list, nullOut: bool = False):
 			commReturn = subprocess.run(comm, check=True)
 			log.debug(commReturn.returncode)
 			return True
-	except subprocess.CalledProcessError as xcp:
+	except subprocess.CalledProcessError:
 		log.exception(f"subprocess.run ERR | {name}")
 		return False
 
 
-def _checkExist(item: str, isFile: bool, path: list = [], make: bool = False):
+def check_exist(item: str, isFile: bool, path: list | str = [], make: bool = False):
 	"""Checks if a file/folder exists. Create if make is true"""
 	log.debug(f"run| item: {item}| isFile: {isFile}| path: {path}| make: {make}")
 	if item is None:
@@ -88,7 +83,6 @@ def _checkExist(item: str, isFile: bool, path: list = [], make: bool = False):
 	if isinstance(path, str):
 		path = [path]
 	itemPath = os.path.join(curDir, *path, item)
-	typ = "File/Folder"
 	if isFile:
 		typ = "File"
 	else:
@@ -97,16 +91,13 @@ def _checkExist(item: str, isFile: bool, path: list = [], make: bool = False):
 		log.debug(f"exists: {itemPath}")
 		return True
 	elif make:
-
 		try:
 			if isFile:
-
-				with open(itemPath, "w") as file:
+				with open(itemPath, "w"):
 					pass
 			else:
-
 				os.mkdir(itemPath)
-		except Exception as xcp:
+		except Exception:
 			log.exception(f"{typ} Creation Failed!")
 			return False
 	else:
@@ -117,41 +108,41 @@ def basicChecks():
 	"""Checks to ensure required core/target files are present"""
 	ok = True
 	log.info("Checking For Core Requirements File")
-	_checkExist(coreCF.requiredModules, isFile=True, make=True)
+	check_exist(coreCF.requiredModules, isFile=True, make=True)
 	log.info("Checking For Target Directory")
-	_checkExist(item=tarDir, isFile=False, make=True)
+	check_exist(item=tarDir, isFile=False, make=True)
 	log.info("Checking For Archive Directory")
-	_checkExist(item=targetCF.archiveDirectory, isFile=False, make=True)
+	check_exist(item=targetCF.archiveDirectory, isFile=False, make=True)
 	log.info("Checking For Target Script")
-	if not _checkExist(item=targetCF.scriptName, isFile=True, path=tarDir):
+	if not check_exist(item=targetCF.scriptName, isFile=True, path=tarDir):
 		log.critical("Target Script Missing!")
 		ok = False
 	if targetCF.requiredModules:
 		log.info("Checking For Target Requirements File")
-		if not _checkExist(item=targetCF.requiredModules, isFile=True, path=tarDir):
+		if not check_exist(item=targetCF.requiredModules, isFile=True, path=tarDir):
 			log.error("Target Requirements File Missing")
 	if len(targetCF.requiredFiles) > 0:
 		for element in targetCF.requiredFiles:
-			if _checkExist(item=element, isFile=True, path=tarDir, make=True):
+			if check_exist(item=element, isFile=True, path=tarDir, make=True):
 				log.info(f"Target Required File {element} Found")
 			else:
 				ok = False
 	if len(targetCF.optionalFiles) > 0:
 		for element in targetCF.optionalFiles:
-			if _checkExist(item=element, isFile=True, path=tarDir):
+			if check_exist(item=element, isFile=True, path=tarDir):
 				log.info(f"Target Optional File {element} Found")
 	if len(targetCF.requiredFolders) > 0:
 		for element in targetCF.requiredFolders:
-			if _checkExist(item=element, isFile=False, path=tarDir, make=True):
+			if check_exist(item=element, isFile=False, path=tarDir, make=True):
 				log.info(f"Target Required Folder {element} Found")
 			else:
 				ok = False
 	if len(targetCF.optionalFiles) > 0:
 		for element in targetCF.optionalFolders:
-			if _checkExist(item=element, isFile=False, path=tarDir):
+			if check_exist(item=element, isFile=False, path=tarDir):
 				log.info(f"Target Optional Folder {element} Found")
 	log.info("Ensuring pip")
-	if not runCOMM(name="Ensure pip", comm=["python", "-m", "ensurepip", "--upgrade"]):
+	if not run_comm(name="Ensure pip", comm=["python", "-m", "ensurepip", "--upgrade"]):
 		ok = False
 	return ok
 
@@ -161,7 +152,6 @@ if basicChecks():
 	log.info("Basic Checks Successful")
 else:
 	exit()
-
 
 import netifaces
 
@@ -174,13 +164,13 @@ def networkChecks(core: bool):
 		pingType = "-n"
 	else:
 		pingType = "-c"
-
+	
 	def ping(host):
 		if host is None:
 			host = netifaces.gateways()["default"][netifaces.AF_INET][0]
 		if host:
-			return runCOMM(name="ping", comm=["ping", pingType, "1", host])
-
+			return run_comm(name="ping", comm=["ping", pingType, "1", host])
+	
 	retryMax = coreCF.retry + 1
 	retryCount = 0
 	while True and core is True:
@@ -193,7 +183,7 @@ def networkChecks(core: bool):
 			if retryCount == retryMax:
 				time.sleep((coreCF.paceErr * 20))
 			time.sleep(coreCF.paceErr)
-
+	
 	retryCount = 0
 	while True:
 		if core is True:
@@ -203,15 +193,15 @@ def networkChecks(core: bool):
 		bad = 0
 		for itemName, itemVal in netChecks.items():
 			log.info(f"Pinging {itemName}")
-			せ = time.perf_counter()
+			st = time.perf_counter()
 			if ping(itemVal):
-				え = time.perf_counter()
-				log.info(f"{itemName} Ping Successful {round((え - せ) * 1000)}ms")
+				en = time.perf_counter()
+				log.info(f"{itemName} Ping Successful {round((st - en) * 1000)}ms")
 				time.sleep((coreCF.paceNorm / 1000))
 			else:
 				log.error(f"Unsuccessful Pinging {itemName}")
 				bad += 1
-
+		
 		if bad > 0:
 			retryCount += 1
 			if retryCount == retryMax:
@@ -237,7 +227,7 @@ def moduleChecks():
 		"-r",
 		f"{os.path.join(curDir, coreCF.requiredModules)}",
 	]
-	if not runCOMM(name="Python pip Core", comm=coreReqs):
+	if not run_comm(name="Python pip Core", comm=coreReqs):
 		return False
 	log.info("Core Modules Installed")
 	if not targetCF.requiredModules:
@@ -249,7 +239,7 @@ def moduleChecks():
 			"-r",
 			f"{os.path.join(curDir, targetCF.requiredModules)}",
 		]
-		if not runCOMM(name="Python pip Target", comm=targetReqs):
+		if not run_comm(name="Python pip Target", comm=targetReqs):
 			return False
 		log.info("Target Modules Installed")
 
@@ -261,7 +251,8 @@ if coreCF.checkRequiredPackages:
 	else:
 		exit()
 
-def moveThing(name:str, source:str, destination:str):
+
+def moveThing(name: str, source: str, destination: str):
 	if os.path.exists(source):
 		log.warning(f"Thing Exists SRC: {source}")
 	if os.path.exists(destination):
@@ -269,32 +260,33 @@ def moveThing(name:str, source:str, destination:str):
 		if '-' in destination[-3:]:
 			var = int(destination[-2:].removeprefix('-'))
 			var = var + 1
-		destination = destination + f" -{var}"
+			destination = destination + f" -{var}"
 	try:
 		shutil.move(src=source, dst=destination)
-	except Exception as xcp:
+	except Exception:
 		log.exception(name)
 
 
-def gitClone():
+def gitClone() -> int | bool:
 	"""Downloads default branch of repo. Moves what's in active to archive."""
 	log.debug("run")
 	from git import Repo
-
+	
 	gitURL = f"http://github.com/{targetCF.repository}.git"
-	gitFold = os.mkdir(os.path.join(curDir, "gitDown"))
+	gitFold = os.path.join(curDir, "gitDown")
+	os.mkdir(gitFold)
 	try:
 		Repo.clone_from(gitURL, gitFold)
-	except Exception as xcp:
+	except Exception:
 		log.exception("Github Clone")
 	log.info("Repository Clone Successful")
+	
 	def compareVersion():
 		log.info("Compare Version Numbers")
 		file = "changelog.json"
 		# fmt: off
-		if (_checkExist(item=file, isFile=True, path=[targetCF.targetDirectory])
-		and _checkExist(item=file, isFile=True, path=["gitDown"])):
-		# fmt: on
+		if (check_exist(item=file, isFile=True, path=[targetCF.targetDirectory])
+		and check_exist(item=file, isFile=True, path=["gitDown"])):  # fmt: on
 			import json
 			tarChan = os.path.join(curDir, targetCF.targetDirectory, file)
 			with open(tarChan, "r") as tarJSON:
@@ -304,24 +296,24 @@ def gitClone():
 			with open(gitChan, "r") as gitJSON:
 				gitJSON = json.load(gitJSON)
 				gitVer = list(gitJSON.keys())[-1]
-			return version.parse(tarVer) < version.parse(gitVer)
+			if version.parse(tarVer) < version.parse(gitVer):
+				return True
 		else:
 			return 2
-
+	
 	if targetCF.checkVersion:
 		compReturn = compareVersion()
 		if compReturn is False:
 			log.info("Target Version >= Git Version")
 			return False
 	log.info("Moving active to archive")
-	curDate = datetime.today().strftime('%Y-%m-%dT%H:%M')
-	targetBak = f"{(targetCF.repository).split('/')[-1]} {coreCF.folderSeperator} {curDate}"
+	curDate = datetime.today().strftime('%Y-%m-%d_%H:%M')
+	targetBak = f"{targetCF.repository.split('/')[-1]} {coreCF.folderSeperator} {curDate}"
 	arcDir = os.path.join(curDir, targetCF.archiveDirectory, targetBak)
 	moveThing(name="Move active to archive", source=tarDir, destination=arcDir)
 	log.info("Moving gitclone to active")
 	os.rmdir(tarDir)
-	moveThing(name="Move gitclone to active", source=gitClone, destination=tarDir)
-		
+	moveThing(name="Move gitclone to active", source=gitFold, destination=tarDir)
 
 
 if coreCF.gitHub:
@@ -329,5 +321,4 @@ if coreCF.gitHub:
 	if gitClone():
 		log.info("Complete")
 
-
-#MIT APasz
+# MIT APasz
