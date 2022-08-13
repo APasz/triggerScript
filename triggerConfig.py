@@ -30,7 +30,7 @@ class CORE:
     # "Github": "www.github.com",
 
 
-@dataclass(slots=True, frozen=True)
+@dataclass(slots=True)
 class TARGET:
     """Config relating to the script to be triggered"""
 
@@ -38,25 +38,33 @@ class TARGET:
     scriptName = "bot.py"
     # Name of requirements file for target (if not needed, arg = False)
     requiredModules = False
-    # Names of the required files for target
-    requiredFiles = []
+    # Names of the required files for target. If Github is enabled, will copy these over when updating
+    # (subdir not supported) (Missing will be made)
+    requiredFiles = ["config.py", "config.json"]
     # Names of the optional files for target
-    optionalFiles = []
-    # Names of the required folders for target
-    requiredFolders = []
+    # (subdir not supported)
+    optionalFiles = ["missing.png"]
+    # Names of the required folders for target. If Github is enabled, will copy these over when updating
+    # (subdir not supported) (Missing will be made)
+    requiredFolders = ["secrects"]
     # Names of the optional folders for target
+    # (subdir not supported)
     optionalFolders = []
-    # Username/repo (SSCBot | Strider)
+    # Github username/repo
+    # (SSCBot | Strider)
     repository = "APasz/Strider"
-    # Folder that the target script itself is in. The one that'll be run
+    # Folder that the target script itself is in. The one that'll be run.
+    # (if False, defaults to active)
     targetDirectory = "active"
     # Folder that old versions will be stored
+    # (if False, defaults to archive)
     archiveDirectory = "archive"
     # Addresses to ping to ensure the target script can start
     network = {"Discord": "www.discord.com"}
     # Check version before replace
-    # (only compatible with scripts that have a changelog.json in root where the keys are the version)
-    checkVersion = True
+    # (only compatible with scripts that have a changelog.json in root where the keys are the version,
+    # like in the changelog.json bundled with this script)
+    checkVersion = False
 
 
 # MIT APasz
