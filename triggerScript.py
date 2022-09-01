@@ -2,6 +2,12 @@
 import json
 import logging
 import os
+
+pajoin = os.path.join
+
+PID = os.getpid()
+print(f"*** Starting ***\nPID: {PID}")
+
 import platform
 import shutil
 import subprocess
@@ -12,37 +18,25 @@ from datetime import datetime as datetime
 from packaging import version
 
 from triggerConfig import CORE as coreCF
-
-if not isinstance(targetCF.targetDirectory, str):
-    targetCF.targetDirectory = "active"
 from triggerConfig import TARGET as targetCF
 
-if not isinstance(targetCF.archiveDirectory, str):
-    targetCF.archiveDirectory = "archive"
-
-PID = os.getpid()
-print(f"*** Starting ***\nPID: {PID}")
+logINIT = 5
 scriptName = (os.path.basename(__file__)).removesuffix(".py")
-log = logging.getLogger(scriptName)
-log.setLevel(logging.DEBUG)
+log = logging.getLogger("TSlog")
 logging.addLevelName(logging.DEBUG, "DBUG")
 
 handleConsole = logging.StreamHandler(sys.stdout)
 handleConsole.setFormatter(
     logging.Formatter("%(asctime)s |:| %(funcName)s | %(message)s", "%H:%M:%S")
 )
-handleConsole.setLevel(logging.DEBUG)
+handleConsole.setLevel(logINIT)
 log.addHandler(handleConsole)
 
-if version.parse(platform.python_version()) < version.parse("3.10.0"):
-    log.critical("Python 3.10.0 or greater is required!")
-    exit()
 
 curDir = os.path.dirname(os.path.realpath(__file__))
-tarDir = os.path.join(curDir, targetCF.targetDirectory)
 
 handleFile = logging.FileHandler(
-    filename=f"{curDir}{os.sep}{scriptName}.log",
+    filename=pajoin(curDir, "TSlog.log"),
     encoding="utf-8",
     mode="a",
 )
@@ -51,9 +45,16 @@ handleFile.setFormatter(
         "%(asctime).19s %(created).2f | %(levelname).4s |:| %(funcName)s | %(message)s",
     )
 )
-handleFile.setLevel(coreCF.logLevel.upper())
+handleFile.setLevel(logINIT)
 log.addHandler(handleFile)
 
+if version.parse(platform.python_version()) <= version.parse("3.10.0"):
+    log.fatal("Python 3.10.0 or greater is required!")
+    exit()
+
+
+tarDir = pajoin(curDir, targetCF.targetDirectory)
+log.setLevel("DEBUG")
 log.critical(
     f"""Starting...
 	PID: {PID}
@@ -64,16 +65,20 @@ log.critical(
 	Target Directory: {tarDir}"""
 )
 
+import util
 
-def run_comm(name: str, comm: list, nullOut: bool = False):
+
+def run_comm(name: str, comm: list, wd: str | None = None, nullOut: bool = False):
     log.debug(f"{name} | {comm}")
     try:
         if nullOut:
-            commReturn = subprocess.run(comm, stdout=subprocess.DEVNULL, check=True)
+            commReturn = subprocess.run(
+                comm, cwd=wd, stdout=subprocess.DEVNULL, check=True
+            )
             log.debug(commReturn.returncode)
             return True
         else:
-            commReturn = subprocess.run(comm, check=True)
+            commReturn = subprocess.run(comm, cwd=wd, check=True)
             log.debug(commReturn.returncode)
             return True
     except subprocess.CalledProcessError:
@@ -81,87 +86,84 @@ def run_comm(name: str, comm: list, nullOut: bool = False):
         return False
 
 
-def check_exist(
-    item: str, isFile: bool, path: list | str = [], make: bool = False
-) -> bool:
-    """Checks if a file/folder exists. Create if make is true"""
-    log.debug(f"run| item: {item}| isFile: {isFile}| path: {path}| make: {make}")
-    if item is None:
-        log.error("Item Is Empty!")
-    if isinstance(path, str):
-        path = [path]
-    itemPath = os.path.join(curDir, *path, item)
-    if isFile:
-        typ = "File"
-    else:
-        typ = "Folder"
-    if os.path.exists(itemPath):
-        log.debug(f"exists: {itemPath}")
-        return True
-    elif make:
-        try:
-            if isFile:
-                with open(itemPath, "w"):
-                    pass
-            else:
-                os.mkdir(itemPath)
-            return True
-        except Exception:
-            log.exception(f"{typ} Creation Failed!")
-            return False
-    else:
-        log.error(f"{typ} Missing: {itemPath}")
-        return False
-
-
 def basicChecks():
     """Checks to ensure required core/target files are present"""
     ok = True
     log.info("Checking For Core Requirements File")
-    check_exist(coreCF.requiredModules, isFile=True, make=True)
-    log.info("Checking For Target Directory")
-    check_exist(item=tarDir, isFile=False, make=True)
-    log.info("Checking For Archive Directory")
-    check_exist(item=targetCF.archiveDirectory, isFile=False, make=True)
-    log.info("Checking For Target Script")
-    if not check_exist(item=targetCF.scriptName, isFile=True, path=tarDir, make=True):
-        log.critical("Target Script Missing!")
+    if util.check_exist(itemPath=pajoin(curDir, coreCF.requiredModules), isFile=True):
+        log.info(f"Core {coreCF.requiredModules}: Found")
+    else:
+        log.error(f"Core {coreCF.requiredModules=}: Missing!")
         ok = False
+
+    log.info("Checking For Target Directory")
+    if util.check_exist(itemPath=tarDir, isFile=False):
+        log.info(f"Target Directory {targetCF.targetDirectory}: Found")
+    else:
+        log.error(f"Target Directory {targetCF.targetDirectory=}: Missing!")
+        if util.make_thing(itemPath=tarDir, isFile=False):
+            log.info(f"Target Directory {targetCF.targetDirectory}: Made")
+
+    log.info("Checking For Archive Directory")
+    if util.check_exist(
+        itemPath=pajoin(curDir, targetCF.archiveDirectory), isFile=False
+    ):
+        log.info(f"Archive Directory {targetCF.archiveDirectory}: Found")
+    else:
+        log.error(f"Archive Directory {targetCF.archiveDirectory=}: Missing!")
+        if util.make_thing(
+            itemPath=pajoin(curDir, targetCF.archiveDirectory), isFile=False
+        ):
+            log.info(f"Target Directory {targetCF.targetDirectory}: Made")
+
+    log.info("Checking For Target Script")
+    if util.check_exist(itemPath=pajoin(tarDir, targetCF.scriptName), isFile=True):
+        log.info(f"Target Script {targetCF.scriptName}: Found")
+    else:
+        log.critical(f"Target Script {targetCF.scriptName=}: Missing!")
+        ok = False
+
     if targetCF.requiredModules:
         log.info("Checking For Target Requirements File")
-        if not check_exist(item=targetCF.requiredModules, isFile=True, path=tarDir):
-            log.error("Target Requirements File Missing")
+        if util.check_exist(
+            itemPath=pajoin(tarDir, targetCF.requiredModules), isFile=True
+        ):
+            log.info(f"Target {targetCF.requiredFiles}: Found")
+        else:
+            log.error(f"Target {targetCF.requiredFiles=}: Missing!")
+            ok = False
+
     if len(targetCF.requiredFiles) > 0:
         for element in targetCF.requiredFiles:
-            if check_exist(item=element, isFile=True, path=tarDir, make=True):
-                log.info(f"Target Required File {element} Found")
+            if util.check_exist(itemPath=pajoin(tarDir, element), isFile=True):
+                log.info(f"Target Required File {element}: Found")
             else:
+                log.error(f"Target Required File {element}: Missing!")
                 ok = False
-    if len(targetCF.optionalFiles) > 0:
-        for element in targetCF.optionalFiles:
-            if check_exist(item=element, isFile=True, path=tarDir):
-                log.info(f"Target Optional File {element} Found")
+
     if len(targetCF.requiredFolders) > 0:
         for element in targetCF.requiredFolders:
-            if check_exist(item=element, isFile=False, path=tarDir, make=True):
-                log.info(f"Target Required Folder {element} Found")
+            if util.check_exist(itemPath=pajoin(tarDir, element), isFile=False):
+                log.info(f"Target Required Folder {element}: Found")
             else:
-                ok = False
-    if len(targetCF.optionalFiles) > 0:
-        for element in targetCF.optionalFolders:
-            if check_exist(item=element, isFile=False, path=tarDir):
-                log.info(f"Target Optional Folder {element} Found")
-    log.info("Ensuring pip")
-    if not run_comm(name="Ensure pip", comm=["python", "-m", "ensurepip", "--upgrade"]):
+                log.error(f"Target Required Folder {element}: Missing!")
+                if util.make_thing(itemPath=pajoin(tarDir, element), isFile=False):
+                    log.info(f"Target Required Folder {element}: Made")
+
+    log.info("Ensuring PiP")
+    if run_comm(name="Ensure pip", comm=["python", "-m", "ensurepip", "--upgrade"]):
+        log.info("PiP Ensured")
+    else:
+        log.error("Unable To Ensure PiP")
         ok = False
     return ok
 
 
-log.info("Checking For Required Files/Folders...")
+log.info("Performing Basic Checks...")
 if basicChecks():
     log.info("Basic Checks Successful")
 else:
-    log.error("Basic Checks Failed!")
+    log.fatal("Basic Checks Failed!")
     exit()
 
 import netifaces
@@ -216,11 +218,12 @@ def networkChecks(core: bool):
         if bad > 0:
             retryCount += 1
             if retryCount == retryMax:
-                log.error("Reached Maximum Retries!")
-                exit()
+                log.fatal("Reached Maximum Retries!")
+                return False
             time.sleep(coreCF.paceErr)
         else:
             break
+    return True
 
 
 log.info("Checking Network...")
@@ -238,7 +241,7 @@ def moduleChecks():
         "pip",
         "install",
         "-r",
-        f"{os.path.join(curDir, coreCF.requiredModules)}",
+        f"{pajoin(curDir, coreCF.requiredModules)}",
     ]
     if not run_comm(name="Python pip Core", comm=coreReqs):
         return False
@@ -251,13 +254,14 @@ def moduleChecks():
             "pip",
             "install",
             "-r",
-            f"{os.path.join(curDir, targetCF.requiredModules)}",
+            f"{pajoin(curDir, targetCF.requiredModules)}",
         ]
         if not run_comm(name="Python pip Target", comm=targetReqs):
             return False
         log.info("Target Modules Installed")
     else:
         return True
+    return True
 
 
 log.info("Checking Module Requirements...")
@@ -265,68 +269,8 @@ if coreCF.checkRequiredPackages:
     if moduleChecks():
         log.info("Module Check Successful")
     else:
-        log.error("Module Checks Failed!")
+        log.fatal("Module Checks Failed!")
         exit()
-
-
-def deleteThing(item: str):
-    """Given a path will try to delete it as file, then empty folder, then non-empty folder"""
-    if not os.path.exists(item):
-        return False
-    try:
-        os.remove(item)
-        log.debug(f"deleteFile {item=}")
-        return True
-    except IsADirectoryError:
-        try:
-            os.rmdir(item)
-            log.debug(f"deleteEmptyFolder {item=}")
-            return True
-        except OSError:
-            try:
-                shutil.rmtree(item)
-                log.debug(f"deleteNonEmptyFolder {item=}")
-                return True
-            except Exception:
-                log.exception(f"deleteNonEmptyFodler {item=}")
-                return False
-        except Exception:
-            log.exception(f"deleteEmptyFolder {item=}")
-            return False
-    except Exception:
-        log.exception(f"deleteFile {item=}")
-        return False
-
-
-def moveThing(
-    name: str,
-    source: str,
-    destination: str,
-    copy: bool = False,
-    overwrite: bool = False,
-):
-    if os.path.exists(source):
-        log.debug(f"Thing Exists SRC: {source}")
-    if os.path.exists(destination):
-        log.warning(f"Thing Exists DST: {destination}")
-        if overwrite:
-            deleteThing(item=destination)
-        else:
-            if "-" in destination[-3:]:
-                var = int(destination[-2:].removeprefix("-"))
-                var = var + 1
-                destination = destination + f" -{var}"
-    try:
-        if copy:
-            shutil.copy(src=source, dst=destination)
-            return True
-        else:
-            shutil.move(src=source, dst=destination)
-            return True
-        time.sleep(coreCF.paceNorm / 100)
-    except Exception:
-        log.exception(name)
-        return False
 
 
 def getVersionJSON(target: bool, filename: str = "changelog.json") -> str | bool:
@@ -335,8 +279,8 @@ def getVersionJSON(target: bool, filename: str = "changelog.json") -> str | bool
         fold = "gitDown"
     else:
         fold = targetCF.targetDirectory
-    file = os.path.join(curDir, fold, filename)
-    if not check_exist(item=filename, isFile=True, path=[fold]):
+    file = pajoin(curDir, fold, filename)
+    if not util.check_exist(itemPath=pajoin(fold, filename), isFile=True):
         return False
     try:
         with open(file, "r") as text:
@@ -359,12 +303,22 @@ def compareVersion():
 
 curDT = datetime.today().strftime("%Y-%m-%d_%H:%M")
 targetBak = f"{targetCF.repository.split('/')[-1]} {coreCF.folderSeperator} {curDT}"
-arcDir = os.path.join(curDir, targetCF.archiveDirectory, targetBak)
+arcDir = pajoin(curDir, targetCF.archiveDirectory, targetBak)
 
 
 def copyRequired(item: str, isFile: bool):
     """Copies required files/folders from target"""
-    itemPath = os.path.join(curDir, item)
+    log.debug(f"copyRequired| {item=}")
+    src = pajoin(arcDir, item)
+    dst = pajoin(tarDir, item)
+    if util.copymove_thing(
+        source=src, destination=dst, isFile=isFile, copy=True, overwrite=True
+    ):
+        log.debug("Required Item Copied")
+        return True
+    else:
+        log.error(f"Unable To Copy Required Item {isFile=}| {item=}")
+        return False
 
 
 def gitClone() -> bool:
@@ -373,7 +327,9 @@ def gitClone() -> bool:
     from git import Repo
 
     gitURL = f"http://github.com/{targetCF.repository}.git"
-    gitFold = os.path.join(curDir, "gitDown")
+    gitFold = pajoin(curDir, "gitDown")
+    if os.path.exists(gitFold):
+        util.remove_thing(itemPath=gitFold, isFile=False)
     os.mkdir(gitFold)
     try:
         Repo.clone_from(gitURL, gitFold)
@@ -386,10 +342,19 @@ def gitClone() -> bool:
             log.info("Git Version <= Target Version")
             return False
     log.info("Moving active to archive")
-    moveThing(name="Move active to archive", source=tarDir, destination=arcDir)
+    if util.copymove_thing(source=tarDir, destination=arcDir, isFile=False, copy=False):
+        log.info(f"Moved! {tarDir=}\n{arcDir=}")
+    else:
+        log.error(f"Unable To Move! {tarDir=}\n{arcDir=}")
+        return False
     log.info("Moving gitclone to active")
-    # os.rmdir(tarDir)
-    moveThing(name="Move gitclone to active", source=gitFold, destination=tarDir)
+    if util.copymove_thing(
+        source=gitFold, destination=tarDir, isFile=False, copy=False
+    ):
+        log.info(f"Moved! {gitFold=}\n{tarDir=}")
+    else:
+        log.error(f"Unable To Move! {gitFold=}\n{tarDir=}")
+        return False
     return True
 
 
@@ -400,17 +365,43 @@ if coreCF.gitHub:
     else:
         log.error("Github Clone Failed!")
     log.info("Copying Required Files...")
-    if copyRequired():
-        log.info("Copy Successful")
-    else:
-        log.error("Copying Failed!")
+    for item in targetCF.requiredFiles:
+        copyRequired(item=item, isFile=True)
+    log.info("Copy Successful")
     log.info("Copying Required Folders...")
-    if copyRequired():
-        log.info("Copy Successful")
-    else:
-        log.error("Copying Failed!")
+    for item in targetCF.requiredFolders:
+        copyRequired(item=item, isFile=False)
+    log.info("Copy Successful")
 else:
     log.info("Github Not Enabled... Skipping")
+
+if targetCF.network is not None:
+    log.info("Performing Target Network Checks")
+    if networkChecks(core=False):
+        log.info("Target Network Checks Successful")
+    else:
+        log.error("Target Networks Unreachable!")
+
+
+def triggerTarget():
+    """Run the target script"""
+    log.info("Trigging Target Script")
+    while True:
+        botCOMM = ["python", targetCF.scriptName]
+        try:
+            run_comm(name="TriggerTarget", comm=botCOMM, wd=tarDir)
+        except Exception as xcp:
+            log.exception("TryTriggerTarget")
+            time.sleep(coreCF.paceErr)
+            if str(targetCF.restartCode) not in xcp.returncode:
+                break
+    return int(xcp.returncode)
+
+
+log.info("Ready To Trigger Script...")
+if coreCF.launchTarget:
+    returncode = triggerTarget()
+    log.critical(f"Target Script Exited! {returncode=}")
 
 
 # MIT APasz
