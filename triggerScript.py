@@ -2,23 +2,20 @@
 import json
 import logging
 import os
+import platform
+import subprocess
+import sys
+import time
+from datetime import datetime as datetime
+
+
+import util
 
 pajoin = os.path.join
 
 PID = os.getpid()
 print(f"*** Starting ***\nPID: {PID}")
 
-import platform
-import shutil
-import subprocess
-import sys
-import time
-from datetime import datetime as datetime
-
-from packaging import version
-
-from triggerConfig import CORE as coreCF
-from triggerConfig import TARGET as targetCF
 
 logINIT = 5
 scriptName = (os.path.basename(__file__)).removesuffix(".py")
@@ -48,6 +45,17 @@ handleFile.setFormatter(
 handleFile.setLevel(logINIT)
 log.addHandler(handleFile)
 
+try:
+    log.info("TRY MODULE IMPORT")
+    from packaging import version
+    import netifaces
+
+    from triggerConfig import CORE as coreCF
+    from triggerConfig import TARGET as targetCF
+except Exception:
+    log.exception("IMPORT FAILED")
+
+
 if version.parse(platform.python_version()) <= version.parse("3.10.0"):
     log.fatal("Python 3.10.0 or greater is required!")
     exit()
@@ -57,15 +65,13 @@ tarDir = pajoin(curDir, targetCF.targetDirectory)
 log.setLevel("DEBUG")
 log.critical(
     f"""Starting...
-	PID: {PID}
-	Platform: {platform.system()} | {platform.node()}
-	Python: {platform.python_version()}
-	Current Directory: {curDir}
-	Current Working: {os.getcwd()}
-	Target Directory: {tarDir}"""
+    PID: {PID}
+    Platform: {platform.system()} | {platform.node()}
+    Python: {platform.python_version()}
+    Current Directory: {curDir}
+    Current Working: {os.getcwd()}
+    Target Directory: {tarDir}"""
 )
-
-import util
 
 
 def run_comm(name: str, comm: list, wd: str | None = None, nullOut: bool = False):
@@ -166,7 +172,6 @@ else:
     log.fatal("Basic Checks Failed!")
     exit()
 
-import netifaces
 
 sysFolded = (platform.system()).casefold()
 
@@ -209,7 +214,8 @@ def networkChecks(core: bool):
             st = time.perf_counter()
             if ping(itemVal):
                 en = time.perf_counter()
-                log.info(f"{itemName} Ping Successful {round((st - en) * 1000)}ms")
+                log.info(
+                    f"{itemName} Ping Successful {round((st - en) * 1000)}ms")
                 time.sleep((coreCF.paceNorm / 1000))
             else:
                 log.error(f"Unsuccessful Pinging {itemName}")
